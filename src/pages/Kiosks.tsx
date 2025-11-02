@@ -1,17 +1,13 @@
-// src/pages/Kiosks.tsx
-
-import { useState, useEffect, useRef } from "react"; // Added useEffect and useRef
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MapPin, Battery, Clock, Navigation } from "lucide-react";
 import Navbar from "@/components/Navbar";
 
-// --- NEW IMPORTS for Leaflet Map ---
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
-// ---------------------------------
 
 interface Kiosk {
   id: number;
@@ -21,7 +17,7 @@ interface Kiosk {
   availableBatteries: number;
   totalBatteries: number;
   status: "operational" | "busy" | "maintenance";
-  coordinates: { lat: number; lng: number }; // This {lat, lng} format is perfect
+  coordinates: { lat: number; lng: number };
 }
 
 const mockKiosks: Kiosk[] = [
@@ -57,8 +53,6 @@ const mockKiosks: Kiosk[] = [
   },
 ];
 
-// --- LEAFLET ICON FIX ---
-// This fixes a common bug where map marker icons don't appear
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
@@ -68,11 +62,8 @@ let DefaultIcon = L.icon({
     iconAnchor: [12, 41],
 });
 L.Marker.prototype.options.icon = DefaultIcon;
-// ------------------------
 
 
-// --- ROUTING HELPER COMPONENT ---
-// This is a small component that adds the routing line to the map
 interface RoutingProps {
   origin: { lat: number, lng: number };
   destination: { lat: number, lng: number };
@@ -80,18 +71,16 @@ interface RoutingProps {
 
 const Routing = ({ origin, destination }: RoutingProps) => {
   const map = useMap();
-  const routingControlRef = useRef<L.Routing.Control | null>(null);
+  const routingControlRef = useRef<any | null>(null); 
 
   useEffect(() => {
     if (!map) return;
 
-    // If a route control already exists, remove it
     if (routingControlRef.current) {
       map.removeControl(routingControlRef.current);
     }
 
-    // Create the new routing control
-    routingControlRef.current = L.Routing.control({
+    routingControlRef.current = (L.Routing.control as any)({
       waypoints: [
         L.latLng(origin.lat, origin.lng),
         L.latLng(destination.lat, destination.lng)
@@ -99,35 +88,29 @@ const Routing = ({ origin, destination }: RoutingProps) => {
       routeWhileDragging: false,
       addWaypoints: false,
       draggableWaypoints: false,
-      show: false, // This hides the text-based turn-by-turn directions
+      show: false,
       lineOptions: {
-        styles: [{ color: '#6d28d9', opacity: 0.8, weight: 6 }] // Purple route line
-      }
+        styles: [{ color: '#6d28d9', opacity: 0.8, weight: 6 }]
+      } as L.Routing.LineOptions,
     }).addTo(map);
 
-    // Clean up when component unmounts
     return () => {
       if (routingControlRef.current) {
         map.removeControl(routingControlRef.current);
       }
     };
-  }, [map, origin, destination]); // Re-run this effect if the route changes
+  }, [map, origin, destination]); 
 
-  return null; // This component doesn't render any visible HTML
+  return null; 
 };
-// --------------------------------
-
 
 const Kiosks = () => {
   const [selectedKiosk, setSelectedKiosk] = useState<Kiosk | null>(null);
   
-  // --- NEW STATE FOR USER LOCATION ---
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   
-  // Use the first kiosk as a default center if location fails
   const defaultCenter = mockKiosks[0].coordinates;
 
-  // --- NEW EFFECT FOR GETTING LOCATION ---
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -138,12 +121,11 @@ const Kiosks = () => {
       },
       () => {
         console.error("Error: Geolocation failed. Using default location.");
-        setUserLocation(defaultCenter); // Fallback to default
+        setUserLocation(defaultCenter); 
       }
     );
-  }, []); // The empty array [] means this runs only once on page load
+  }, []); 
 
-  // (Your existing helper functions are perfect, no changes needed)
   const getStatusColor = (status: Kiosk["status"]) => {
     switch (status) {
       case "operational":
@@ -164,8 +146,6 @@ const Kiosks = () => {
     return "text-destructive";
   };
   
-  // --- LOADING STATE ---
-  // Show a loading message until we have the user's location
   if (!userLocation) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -178,7 +158,6 @@ const Kiosks = () => {
     );
   }
 
-  // --- MAIN RENDER ---
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
