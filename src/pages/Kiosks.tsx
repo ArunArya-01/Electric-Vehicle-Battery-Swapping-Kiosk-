@@ -1,9 +1,17 @@
-import { useState } from "react";
+// src/pages/Kiosks.tsx
+
+import { useState, useEffect, useRef } from "react"; // Added useEffect and useRef
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MapPin, Battery, Clock, Navigation } from "lucide-react";
 import Navbar from "@/components/Navbar";
+
+// --- NEW IMPORTS for Leaflet Map ---
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet-routing-machine';
+// ---------------------------------
 
 interface Kiosk {
   id: number;
@@ -13,7 +21,7 @@ interface Kiosk {
   availableBatteries: number;
   totalBatteries: number;
   status: "operational" | "busy" | "maintenance";
-  coordinates: { lat: number; lng: number };
+  coordinates: { lat: number; lng: number }; // This {lat, lng} format is perfect
 }
 
 const mockKiosks: Kiosk[] = [
@@ -49,9 +57,93 @@ const mockKiosks: Kiosk[] = [
   },
 ];
 
+// --- LEAFLET ICON FIX ---
+// This fixes a common bug where map marker icons don't appear
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconAnchor: [12, 41],
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+// ------------------------
+
+
+// --- ROUTING HELPER COMPONENT ---
+// This is a small component that adds the routing line to the map
+interface RoutingProps {
+  origin: { lat: number, lng: number };
+  destination: { lat: number, lng: number };
+}
+
+const Routing = ({ origin, destination }: RoutingProps) => {
+  const map = useMap();
+  const routingControlRef = useRef<L.Routing.Control | null>(null);
+
+  useEffect(() => {
+    if (!map) return;
+
+    // If a route control already exists, remove it
+    if (routingControlRef.current) {
+      map.removeControl(routingControlRef.current);
+    }
+
+    // Create the new routing control
+    routingControlRef.current = L.Routing.control({
+      waypoints: [
+        L.latLng(origin.lat, origin.lng),
+        L.latLng(destination.lat, destination.lng)
+      ],
+      routeWhileDragging: false,
+      addWaypoints: false,
+      draggableWaypoints: false,
+      show: false, // This hides the text-based turn-by-turn directions
+      lineOptions: {
+        styles: [{ color: '#6d28d9', opacity: 0.8, weight: 6 }] // Purple route line
+      }
+    }).addTo(map);
+
+    // Clean up when component unmounts
+    return () => {
+      if (routingControlRef.current) {
+        map.removeControl(routingControlRef.current);
+      }
+    };
+  }, [map, origin, destination]); // Re-run this effect if the route changes
+
+  return null; // This component doesn't render any visible HTML
+};
+// --------------------------------
+
+
 const Kiosks = () => {
   const [selectedKiosk, setSelectedKiosk] = useState<Kiosk | null>(null);
+  
+  // --- NEW STATE FOR USER LOCATION ---
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+  
+  // Use the first kiosk as a default center if location fails
+  const defaultCenter = mockKiosks[0].coordinates;
 
+  // --- NEW EFFECT FOR GETTING LOCATION ---
+  useEffect(() => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      () => {
+        console.error("Error: Geolocation failed. Using default location.");
+        setUserLocation(defaultCenter); // Fallback to default
+      }
+    );
+  }, []); // The empty array [] means this runs only once on page load
+
+  // (Your existing helper functions are perfect, no changes needed)
   const getStatusColor = (status: Kiosk["status"]) => {
     switch (status) {
       case "operational":
@@ -71,7 +163,22 @@ const Kiosks = () => {
     if (percentage > 20) return "text-yellow-500";
     return "text-destructive";
   };
+  
+  // --- LOADING STATE ---
+  // Show a loading message until we have the user's location
+  if (!userLocation) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Navbar />
+        <div className="text-center">
+          <MapPin className="h-12 w-12 text-primary mx-auto animate-pulse" />
+          <p className="text-lg text-muted-foreground mt-4">Finding your location...</p>
+        </div>
+      </div>
+    );
+  }
 
+  // --- MAIN RENDER ---
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -87,27 +194,59 @@ const Kiosks = () => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Map Placeholder */}
-          <Card className="md:sticky md:top-24 h-fit">
-            <CardContent className="p-0">
-              <div className="bg-muted rounded-lg h-[400px] flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10" />
-                <div className="relative text-center z-10">
-                  <MapPin className="h-16 w-16 text-primary mx-auto mb-4" />
-                  <p className="text-muted-foreground">
-                    Interactive map coming soon
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {selectedKiosk
-                      ? `Selected: ${selectedKiosk.name}`
-                      : "Select a kiosk to view location"}
-                  </p>
-                </div>
-              </div>
+          
+          {/* --- MAP CONTAINER (REPLACES PLACEHOLDER) --- */}
+          <Card className="md:sticky md:top-24 h-[400px] md:h-[500px]">
+            <CardContent className="p-0 h-full">
+              <MapContainer 
+                center={userLocation} // Center the map on the user
+                zoom={13} 
+                style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
+              >
+                {/* This is the map "skin" from OpenStreetMap (100% free) */}
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                />
+                
+                {/* Marker for the user's location */}
+                <Marker position={userLocation}>
+                  <Popup>You are here</Popup>
+                </Marker>
+
+                {/* Markers for all the kiosks */}
+                {mockKiosks.map((kiosk) => (
+                  <Marker 
+                    key={kiosk.id} 
+                    position={kiosk.coordinates}
+                    // This makes the marker "pulse" when selected
+                    eventHandlers={{
+                      click: () => setSelectedKiosk(kiosk),
+                    }}
+                  >
+                    <Popup>
+                      <b>{kiosk.name}</b><br />
+                      {kiosk.availableBatteries} batteries available.
+                    </Popup>
+                  </Marker>
+                ))}
+                
+                {/* This component will draw the route line! */}
+                {/* It appears only when a kiosk is selected */}
+                {userLocation && selectedKiosk && (
+                  <Routing 
+                    origin={userLocation} 
+                    destination={selectedKiosk.coordinates} 
+                  />
+                )}
+
+              </MapContainer>
             </CardContent>
           </Card>
+          {/* --- END OF MAP CONTAINER --- */}
 
-          {/* Kiosk List */}
+
+          {/* Kiosk List (Your original code, no changes needed) */}
           <div className="space-y-4">
             {mockKiosks.map((kiosk) => (
               <Card
