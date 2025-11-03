@@ -2,14 +2,22 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Battery, Clock, Navigation } from "lucide-react";
+import { MapPin, Battery, Clock, Navigation, Sparkles } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { Link } from "react-router-dom";
 
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
 
-interface Kiosk {
+import { toast } from "sonner";
+
+// --- 1. IMPORT useKiosks FROM YOUR NEW CONTEXT ---
+import { useKiosks } from "@/context/KioskContext"; 
+// Note: Your path might be '../context/KioskContext' if you're in src/pages
+// --------------------------------------------------
+
+export interface Kiosk {
   id: number;
   name: string;
   address: string;
@@ -20,7 +28,8 @@ interface Kiosk {
   coordinates: { lat: number; lng: number };
 }
 
-const mockKiosks: Kiosk[] = [
+// We KEEP this mock data here because our Context file reads from it
+export const mockKiosks: Kiosk[] = [
   {
     id: 1,
     name: "Downtown Station",
@@ -51,7 +60,78 @@ const mockKiosks: Kiosk[] = [
     status: "operational",
     coordinates: { lat: 40.7489, lng: -73.9681 },
   },
+  {
+    id: 4,
+    name: "Uptown Plaza",
+    address: "101 Maple Drive, Uptown",
+    distance: "3.1 km",
+    availableBatteries: 5,
+    totalBatteries: 10,
+    status: "operational",
+    coordinates: { lat: 40.755, lng: -73.986 },
+  },
+  {
+    id: 5,
+    name: "Riverfront Kiosk",
+    address: "22 River Rd, Waterside",
+    distance: "3.5 km",
+    availableBatteries: 0,
+    totalBatteries: 10,
+    status: "maintenance",
+    coordinates: { lat: 40.705, lng: -74.011 },
+  },
+  {
+    id: 6,
+    name: "Central Station",
+    address: "500 Grand St, Midtown",
+    distance: "4.0 km",
+    availableBatteries: 12,
+    totalBatteries: 15,
+    status: "operational",
+    coordinates: { lat: 40.735, lng: -73.99 },
+  },
+  {
+    id: 7,
+    name: "Westside Mall",
+    address: "332 West End Ave, Westside",
+    distance: "4.2 km",
+    availableBatteries: 2,
+    totalBatteries: 10,
+    status: "busy",
+    coordinates: { lat: 40.778, lng: -73.982 },
+  },
+  {
+    id: 8,
+    name: "Airport Loop",
+    address: "700 Airport Blvd, Airport",
+    distance: "10.5 km",
+    availableBatteries: 14,
+    totalBatteries: 20,
+    status: "operational",
+    coordinates: { lat: 40.6413, lng: -73.7781 },
+  },
+  {
+    id: 9,
+    name: "University Hub",
+    address: "90 College Cres, University Hill",
+    distance: "5.1 km",
+    availableBatteries: 4,
+    totalBatteries: 10,
+    status: "operational",
+    coordinates: { lat: 40.761, lng: -73.971 },
+  },
+  {
+    id: 10,
+    name: "Southpoint Depot",
+    address: "45 South St, Southpoint",
+    distance: "5.8 km",
+    availableBatteries: 7,
+    totalBatteries: 10,
+    status: "operational",
+    coordinates: { lat: 40.69, lng: -73.985 },
+  },
 ];
+// --- (The rest of your Kiosks.tsx file stays exactly the same) ---
 
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -105,11 +185,16 @@ const Routing = ({ origin, destination }: RoutingProps) => {
 };
 
 const Kiosks = () => {
+  // --- 2. GET LIVE DATA FROM THE CONTEXT ---
+  const { liveKiosks } = useKiosks();
+  // -----------------------------------------
+
   const [selectedKiosk, setSelectedKiosk] = useState<Kiosk | null>(null);
   
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   
-  const defaultCenter = mockKiosks[0].coordinates;
+  // We'll use the first kiosk from the live data as the default
+  const defaultCenter = liveKiosks[0].coordinates; 
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -124,7 +209,7 @@ const Kiosks = () => {
         setUserLocation(defaultCenter); 
       }
     );
-  }, []); 
+  }, [defaultCenter]); // Added dependency
 
   const getStatusColor = (status: Kiosk["status"]) => {
     switch (status) {
@@ -146,6 +231,36 @@ const Kiosks = () => {
     return "text-destructive";
   };
   
+  const handleBookSwap = (kioskName: string) => {
+    console.log(`Booking swap at ${kioskName}`);
+    toast.success("Reservation Confirmed!", {
+      description: `Your battery swap at ${kioskName} is confirmed for the next 15 minutes.`,
+      duration: 5000, 
+    });
+  };
+
+  const handleFindBestKiosk = () => {
+    // --- 3. USE liveKiosks FOR THE AI ---
+    const operationalKiosks = liveKiosks.filter(k => k.status === 'operational');
+    // ------------------------------------
+    
+    if (operationalKiosks.length === 0) {
+      toast.error("No operational kiosks found", {
+        description: "Please check back later.",
+      });
+      return;
+    }
+
+    operationalKiosks.sort((a, b) => b.availableBatteries - a.availableBatteries);
+
+    const bestKiosk = operationalKiosks[0];
+    setSelectedKiosk(bestKiosk);
+
+    toast.info("We found the best kiosk for you!", {
+      description: `${bestKiosk.name} has the most available batteries right now.`,
+    });
+  };
+
   if (!userLocation) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -174,31 +289,28 @@ const Kiosks = () => {
 
         <div className="grid md:grid-cols-2 gap-8">
           
-          {/* --- MAP CONTAINER (REPLACES PLACEHOLDER) --- */}
           <Card className="md:sticky md:top-24 h-[400px] md:h-[500px]">
             <CardContent className="p-0 h-full">
               <MapContainer 
-                center={userLocation} // Center the map on the user
+                center={userLocation} 
                 zoom={13} 
                 style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
               >
-                {/* This is the map "skin" from OpenStreetMap (100% free) */}
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 />
                 
-                {/* Marker for the user's location */}
                 <Marker position={userLocation}>
                   <Popup>You are here</Popup>
                 </Marker>
 
-                {/* Markers for all the kiosks */}
-                {mockKiosks.map((kiosk) => (
+                {/* --- 4. USE liveKiosks FOR THE MAP MARKERS --- */}
+                {liveKiosks.map((kiosk) => (
+                // --------------------------------------------
                   <Marker 
                     key={kiosk.id} 
                     position={kiosk.coordinates}
-                    // This makes the marker "pulse" when selected
                     eventHandlers={{
                       click: () => setSelectedKiosk(kiosk),
                     }}
@@ -210,8 +322,6 @@ const Kiosks = () => {
                   </Marker>
                 ))}
                 
-                {/* This component will draw the route line! */}
-                {/* It appears only when a kiosk is selected */}
                 {userLocation && selectedKiosk && (
                   <Routing 
                     origin={userLocation} 
@@ -222,12 +332,26 @@ const Kiosks = () => {
               </MapContainer>
             </CardContent>
           </Card>
-          {/* --- END OF MAP CONTAINER --- */}
 
 
-          {/* Kiosk List (Your original code, no changes needed) */}
           <div className="space-y-4">
-            {mockKiosks.map((kiosk) => (
+
+            <Card>
+              <CardContent className="p-4">
+                <Button 
+                  className="w-full text-lg" 
+                  onClick={handleFindBestKiosk}
+                >
+                  <Sparkles className="h-5 w-5 mr-2" />
+                  Find Best Kiosk For Me
+                </Button>
+              </CardContent>
+            </Card>
+
+
+            {/* --- 5. USE liveKiosks FOR THE LIST --- */}
+            {liveKiosks.map((kiosk) => (
+            // ----------------------------------------
               <Card
                 key={kiosk.id}
                 className={`cursor-pointer transition-all hover:shadow-lg ${
@@ -240,7 +364,15 @@ const Kiosks = () => {
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-xl mb-2">{kiosk.name}</CardTitle>
+                      <CardTitle className="text-xl mb-2">
+                        <Link
+                          to={`/kiosks/${kiosk.id}`}
+                          className="hover:underline"
+                          onClick={(e) => e.stopPropagation()} 
+                        >
+                          {kiosk.name}
+                        </Link>
+                      </CardTitle>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Navigation className="h-4 w-4" />
                         <span>{kiosk.distance} away</span>
@@ -274,11 +406,18 @@ const Kiosks = () => {
                     </div>
 
                     <div className="flex gap-2 pt-2">
-                      <Button className="flex-1" disabled={kiosk.status !== "operational"}>
+                      <Button 
+                        className="flex-1" 
+                        disabled={kiosk.status !== "operational"}
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          handleBookSwap(kiosk.name);
+                        }}
+                      >
                         <Clock className="h-4 w-4 mr-2" />
                         Book Swap
                       </Button>
-                      <Button variant="outline">
+                      <Button variant="outline" onClick={(e) => e.stopPropagation()}>
                         <Navigation className="h-4 w-4" />
                       </Button>
                     </div>

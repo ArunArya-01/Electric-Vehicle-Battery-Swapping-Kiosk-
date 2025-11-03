@@ -11,6 +11,9 @@ const Navbar = () => {
     { to: "/", label: "Home" },
     { to: "/kiosks", label: "Find Kiosks" },
     { to: "/dashboard", label: "Dashboard" },
+    // --- ADD THIS NEW LINK HERE ---
+    { to: "/admin", label: "Admin" },
+    // ----------------------------
   ];
 
   return (
