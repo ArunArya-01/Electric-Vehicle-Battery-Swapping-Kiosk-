@@ -1,263 +1,135 @@
+// src/pages/Kiosks.tsx
+
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Battery, Clock, Navigation, Sparkles } from "lucide-react";
+import { MapPin, Battery, Clock, Navigation, Sparkles, Lock } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Link } from "react-router-dom";
-
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet'; // <-- Tooltip added
 import L from 'leaflet';
 import 'leaflet-routing-machine';
-
 import { toast } from "sonner";
 
-// --- 1. IMPORT useKiosks FROM YOUR NEW CONTEXT ---
-import { useKiosks } from "@/context/KioskContext"; 
-// Note: Your path might be '../context/KioskContext' if you're in src/pages
-// --------------------------------------------------
+// --- All imports now come from the context ---
+import { useKiosks, LiveKiosk } from "@/context/KioskContext"; 
+import { PaymentModal, PaymentMode } from "@/components/PaymentModal"; 
 
-export interface Kiosk {
-  id: number;
-  name: string;
-  address: string;
-  distance: string;
-  availableBatteries: number;
-  totalBatteries: number;
-  status: "operational" | "busy" | "maintenance";
-  coordinates: { lat: number; lng: number };
-}
-
-// We KEEP this mock data here because our Context file reads from it
-export const mockKiosks: Kiosk[] = [
-  {
-    id: 1,
-    name: "Downtown Station",
-    address: "123 Main St, Downtown",
-    distance: "0.5 km",
-    availableBatteries: 8,
-    totalBatteries: 12,
-    status: "operational",
-    coordinates: { lat: 40.7128, lng: -74.006 },
-  },
-  {
-    id: 2,
-    name: "Tech Park Hub",
-    address: "456 Innovation Ave, Tech District",
-    distance: "1.2 km",
-    availableBatteries: 3,
-    totalBatteries: 10,
-    status: "busy",
-    coordinates: { lat: 40.7282, lng: -73.9942 },
-  },
-  {
-    id: 3,
-    name: "Green Valley Center",
-    address: "789 Eco Blvd, Green Valley",
-    distance: "2.8 km",
-    availableBatteries: 10,
-    totalBatteries: 15,
-    status: "operational",
-    coordinates: { lat: 40.7489, lng: -73.9681 },
-  },
-  {
-    id: 4,
-    name: "Uptown Plaza",
-    address: "101 Maple Drive, Uptown",
-    distance: "3.1 km",
-    availableBatteries: 5,
-    totalBatteries: 10,
-    status: "operational",
-    coordinates: { lat: 40.755, lng: -73.986 },
-  },
-  {
-    id: 5,
-    name: "Riverfront Kiosk",
-    address: "22 River Rd, Waterside",
-    distance: "3.5 km",
-    availableBatteries: 0,
-    totalBatteries: 10,
-    status: "maintenance",
-    coordinates: { lat: 40.705, lng: -74.011 },
-  },
-  {
-    id: 6,
-    name: "Central Station",
-    address: "500 Grand St, Midtown",
-    distance: "4.0 km",
-    availableBatteries: 12,
-    totalBatteries: 15,
-    status: "operational",
-    coordinates: { lat: 40.735, lng: -73.99 },
-  },
-  {
-    id: 7,
-    name: "Westside Mall",
-    address: "332 West End Ave, Westside",
-    distance: "4.2 km",
-    availableBatteries: 2,
-    totalBatteries: 10,
-    status: "busy",
-    coordinates: { lat: 40.778, lng: -73.982 },
-  },
-  {
-    id: 8,
-    name: "Airport Loop",
-    address: "700 Airport Blvd, Airport",
-    distance: "10.5 km",
-    availableBatteries: 14,
-    totalBatteries: 20,
-    status: "operational",
-    coordinates: { lat: 40.6413, lng: -73.7781 },
-  },
-  {
-    id: 9,
-    name: "University Hub",
-    address: "90 College Cres, University Hill",
-    distance: "5.1 km",
-    availableBatteries: 4,
-    totalBatteries: 10,
-    status: "operational",
-    coordinates: { lat: 40.761, lng: -73.971 },
-  },
-  {
-    id: 10,
-    name: "Southpoint Depot",
-    address: "45 South St, Southpoint",
-    distance: "5.8 km",
-    availableBatteries: 7,
-    totalBatteries: 10,
-    status: "operational",
-    coordinates: { lat: 40.69, lng: -73.985 },
-  },
-];
-// --- (The rest of your Kiosks.tsx file stays exactly the same) ---
-
+// --- (Icon fix and Routing component are unchanged) ---
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconAnchor: [12, 41],
-});
+let DefaultIcon = L.icon({ iconUrl: icon, shadowUrl: iconShadow, iconAnchor: [12, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-
-interface RoutingProps {
-  origin: { lat: number, lng: number };
-  destination: { lat: number, lng: number };
-}
-
+interface RoutingProps { origin: { lat: number, lng: number }; destination: { lat: number, lng: number }; }
 const Routing = ({ origin, destination }: RoutingProps) => {
   const map = useMap();
   const routingControlRef = useRef<any | null>(null); 
-
   useEffect(() => {
     if (!map) return;
-
-    if (routingControlRef.current) {
-      map.removeControl(routingControlRef.current);
-    }
-
+    if (routingControlRef.current) map.removeControl(routingControlRef.current);
     routingControlRef.current = (L.Routing.control as any)({
-      waypoints: [
-        L.latLng(origin.lat, origin.lng),
-        L.latLng(destination.lat, destination.lng)
-      ],
-      routeWhileDragging: false,
-      addWaypoints: false,
-      draggableWaypoints: false,
-      show: false,
-      lineOptions: {
-        styles: [{ color: '#6d28d9', opacity: 0.8, weight: 6 }]
-      } as L.Routing.LineOptions,
+      waypoints: [ L.latLng(origin.lat, origin.lng), L.latLng(destination.lat, destination.lng) ],
+      routeWhileDragging: false, addWaypoints: false, draggableWaypoints: false, show: false,
+      lineOptions: { styles: [{ color: '#6d28d9', opacity: 0.8, weight: 6 }] } as L.Routing.LineOptions,
     }).addTo(map);
-
-    return () => {
-      if (routingControlRef.current) {
-        map.removeControl(routingControlRef.current);
-      }
-    };
+    return () => { if (routingControlRef.current) map.removeControl(routingControlRef.current); };
   }, [map, origin, destination]); 
-
   return null; 
 };
+// --- (End of unchanged section) ---
+
 
 const Kiosks = () => {
-  // --- 2. GET LIVE DATA FROM THE CONTEXT ---
-  const { liveKiosks } = useKiosks();
-  // -----------------------------------------
+  // --- GET LIVE DATA & FUNCTIONS FROM CONTEXT ---
+  const { liveKiosks, reserveBattery, directUnlock, completeReservation } = useKiosks(); 
 
-  const [selectedKiosk, setSelectedKiosk] = useState<Kiosk | null>(null);
-  
+  const [selectedKiosk, setSelectedKiosk] = useState<LiveKiosk | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
-  
-  // We'll use the first kiosk from the live data as the default
-  const defaultCenter = liveKiosks[0].coordinates; 
+  const defaultCenter = { lat: 40.7128, lng: -74.006 }; // Default center
+
+  // --- STATE FOR THE MODAL ---
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<PaymentMode | null>(null);
+  const [kioskForPayment, setKioskForPayment] = useState<LiveKiosk | null>(null);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
-      },
-      () => {
-        console.error("Error: Geolocation failed. Using default location.");
-        setUserLocation(defaultCenter); 
-      }
+      (position) => { setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude }); },
+      () => { console.error("Geolocation failed."); setUserLocation(defaultCenter); }
     );
-  }, [defaultCenter]); // Added dependency
+  }, []); 
 
-  const getStatusColor = (status: Kiosk["status"]) => {
-    switch (status) {
-      case "operational":
-        return "bg-secondary text-secondary-foreground";
-      case "busy":
-        return "bg-yellow-500 text-white";
-      case "maintenance":
-        return "bg-destructive text-destructive-foreground";
-      default:
-        return "bg-muted";
+  // --- FUNCTIONS TO OPEN THE MODAL ---
+  const openPaymentModal = (kiosk: LiveKiosk, mode: PaymentMode) => {
+    setKioskForPayment(kiosk);
+    setModalMode(mode);
+    setIsModalOpen(true);
+  };
+
+  // --- UPDATED ASYNC PAYMENT FUNCTION ---
+  const handlePaymentConfirm = async (amount: number) => {
+    if (!kioskForPayment || !modalMode) return;
+
+    // Show a "loading" toast while the backend works
+    const toastId = toast.loading("Processing your payment...");
+
+    try {
+      if (modalMode === 'reserve') {
+        await reserveBattery(kioskForPayment.id, amount); // Wait for the function to complete
+        toast.success("Reservation Confirmed!", {
+          id: toastId, // Update the loading toast
+          description: `Your battery at ${kioskForPayment.name} is reserved.`,
+        });
+      } else if (modalMode === 'unlock') {
+        await directUnlock(kioskForPayment.id, amount);
+        toast.success("Payment Successful! Kiosk Unlocked.", {
+          id: toastId,
+          description: `You have unlocked a battery at ${kioskForPayment.name}.`,
+        });
+      } else if (modalMode === 'complete') {
+        await completeReservation(kioskForPayment.id, amount);
+        toast.success("Reservation Unlocked!", {
+          id: toastId,
+          description: `Your payment of $10 is complete.`,
+        });
+      }
+    } catch (error) {
+      toast.error("Payment Failed", {
+        id: toastId,
+        description: "An error occurred. Please try again.",
+      });
     }
   };
 
-  const getAvailabilityColor = (available: number, total: number) => {
-    const percentage = (available / total) * 100;
-    if (percentage > 50) return "text-secondary";
-    if (percentage > 20) return "text-yellow-500";
-    return "text-destructive";
+  // --- HELPER FUNCTIONS ---
+  const getStatusColor = (kiosk: LiveKiosk) => {
+    if (kiosk.reservedBatteries > 0) return "bg-blue-500 text-white";
+    switch (kiosk.status) {
+      case "operational": return "bg-green-500 text-white";
+      case "busy": return "bg-yellow-500 text-white";
+      case "maintenance": return "bg-red-500 text-white";
+      default: return "bg-muted";
+    }
   };
   
-  const handleBookSwap = (kioskName: string) => {
-    console.log(`Booking swap at ${kioskName}`);
-    toast.success("Reservation Confirmed!", {
-      description: `Your battery swap at ${kioskName} is confirmed for the next 15 minutes.`,
-      duration: 5000, 
-    });
-  };
-
+  const getStatusText = (kiosk: LiveKiosk) => {
+    if (kiosk.reservedBatteries > 0) return "Reserved";
+    return kiosk.status;
+  }
+  
   const handleFindBestKiosk = () => {
-    // --- 3. USE liveKiosks FOR THE AI ---
     const operationalKiosks = liveKiosks.filter(k => k.status === 'operational');
-    // ------------------------------------
-    
     if (operationalKiosks.length === 0) {
-      toast.error("No operational kiosks found", {
-        description: "Please check back later.",
-      });
+      toast.error("No operational kiosks found.");
       return;
     }
-
     operationalKiosks.sort((a, b) => b.availableBatteries - a.availableBatteries);
-
     const bestKiosk = operationalKiosks[0];
     setSelectedKiosk(bestKiosk);
-
     toast.info("We found the best kiosk for you!", {
-      description: `${bestKiosk.name} has the most available batteries right now.`,
+      description: `${bestKiosk.name} has the most available batteries.`,
     });
   };
 
@@ -292,74 +164,62 @@ const Kiosks = () => {
           <Card className="md:sticky md:top-24 h-[400px] md:h-[500px]">
             <CardContent className="p-0 h-full">
               <MapContainer 
-                center={userLocation} 
-                zoom={13} 
-                style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
+                center={userLocation} zoom={13} style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
               >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                />
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+                <Marker position={userLocation}><Popup>You are here</Popup></Marker>
                 
-                <Marker position={userLocation}>
-                  <Popup>You are here</Popup>
-                </Marker>
-
-                {/* --- 4. USE liveKiosks FOR THE MAP MARKERS --- */}
                 {liveKiosks.map((kiosk) => (
-                // --------------------------------------------
                   <Marker 
                     key={kiosk.id} 
                     position={kiosk.coordinates}
-                    eventHandlers={{
-                      click: () => setSelectedKiosk(kiosk),
-                    }}
+                    eventHandlers={{ click: () => setSelectedKiosk(kiosk), }}
                   >
-                    <Popup>
+                    {/* --- THIS IS THE FIX --- */}
+                    <Tooltip>
                       <b>{kiosk.name}</b><br />
-                      {kiosk.availableBatteries} batteries available.
-                    </Popup>
+                      Available: {kiosk.availableBatteries}<br />
+                      Reserved: {kiosk.reservedBatteries}
+                    </Tooltip>
+                    {/* --------------------- */}
                   </Marker>
                 ))}
                 
                 {userLocation && selectedKiosk && (
-                  <Routing 
-                    origin={userLocation} 
-                    destination={selectedKiosk.coordinates} 
-                  />
+                  <Routing origin={userLocation} destination={selectedKiosk.coordinates} />
                 )}
-
               </MapContainer>
             </CardContent>
           </Card>
 
 
           <div className="space-y-4">
-
             <Card>
               <CardContent className="p-4">
-                <Button 
-                  className="w-full text-lg" 
-                  onClick={handleFindBestKiosk}
-                >
+                <Button className="w-full text-lg" onClick={handleFindBestKiosk}>
                   <Sparkles className="h-5 w-5 mr-2" />
                   Find Best Kiosk For Me
                 </Button>
               </CardContent>
             </Card>
 
+            {liveKiosks.map((kiosk) => {
+              const isOperational = kiosk.status === 'operational';
+              const canReserve = isOperational && kiosk.availableBatteries > 0;
+              const canUnlock = isOperational && kiosk.availableBatteries > 0;
+              
+              const myReservationId = sessionStorage.getItem("myReservationId");
+              const thisIsMyReservedKiosk = myReservationId ? (parseInt(myReservationId) === kiosk.id) : false;
 
-            {/* --- 5. USE liveKiosks FOR THE LIST --- */}
-            {liveKiosks.map((kiosk) => (
-            // ----------------------------------------
+              return (
               <Card
                 key={kiosk.id}
-                className={`cursor-pointer transition-all hover:shadow-lg ${
+                className={`transition-all cursor-pointer hover:shadow-lg ${
                   selectedKiosk?.id === kiosk.id
                     ? "ring-2 ring-primary shadow-lg"
                     : ""
                 }`}
-                onClick={() => setSelectedKiosk(kiosk)}
+                onClick={() => setSelectedKiosk(kiosk)} 
               >
                 <CardHeader>
                   <div className="flex justify-between items-start">
@@ -378,8 +238,8 @@ const Kiosks = () => {
                         <span>{kiosk.distance} away</span>
                       </div>
                     </div>
-                    <Badge className={getStatusColor(kiosk.status)}>
-                      {kiosk.status}
+                    <Badge className={getStatusColor(kiosk)}>
+                      {getStatusText(kiosk)}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -392,42 +252,76 @@ const Kiosks = () => {
                     
                     <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                       <div className="flex items-center gap-2">
-                        <Battery className="h-5 w-5 text-primary" />
-                        <span className="text-sm font-medium">Available Batteries</span>
+                        <Battery className="h-5 w-5 text-green-500" />
+                        <span className="text-sm font-medium">Available</span>
+                        <span className="text-lg font-bold">{kiosk.availableBatteries}</span>
                       </div>
-                      <span
-                        className={`text-lg font-bold ${getAvailabilityColor(
-                          kiosk.availableBatteries,
-                          kiosk.totalBatteries
-                        )}`}
-                      >
-                        {kiosk.availableBatteries}/{kiosk.totalBatteries}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-blue-500" />
+                        <span className="text-sm font-medium">Reserved</span>
+                        <span className="text-lg font-bold">{kiosk.reservedBatteries}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Total</span>
+                        <span className="text-lg font-bold">{kiosk.totalBatteries}</span>
+                      </div>
                     </div>
 
-                    <div className="flex gap-2 pt-2">
+                    {thisIsMyReservedKiosk ? (
                       <Button 
-                        className="flex-1" 
-                        disabled={kiosk.status !== "operational"}
+                        className="w-full" 
+                        size="lg"
                         onClick={(e) => {
-                          e.stopPropagation(); 
-                          handleBookSwap(kiosk.name);
+                          e.stopPropagation();
+                          openPaymentModal(kiosk, "complete");
                         }}
                       >
-                        <Clock className="h-4 w-4 mr-2" />
-                        Book Swap
+                        <Lock className="h-4 w-4 mr-2" />
+                        Unlock My Reserved Battery ($10)
                       </Button>
-                      <Button variant="outline" onClick={(e) => e.stopPropagation()}>
-                        <Navigation className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    ) : (
+                      <div className="flex gap-2 pt-2">
+                        <Button 
+                          className="flex-1" 
+                          disabled={!canReserve}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPaymentModal(kiosk, "reserve");
+                          }}
+                        >
+                          <Clock className="h-4 w-4 mr-2" />
+                          Reserve for Later ($5)
+                        </Button>
+                        <Button 
+                          className="flex-1" 
+                          variant="outline"
+                          disabled={!canUnlock}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPaymentModal(kiosk, "unlock");
+                          }}
+                        >
+                          <Lock className="h-4 w-4 mr-2" />
+                          Unlock Now ($15)
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         </div>
       </main>
+
+      <PaymentModal
+        kiosk={kioskForPayment}
+        mode={modalMode}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={handlePaymentConfirm}
+      />
     </div>
   );
 };

@@ -15,12 +15,10 @@ import {
   Legend,
 } from 'chart.js';
 import Navbar from '@/components/Navbar';
-import { useKiosks } from '@/context/KioskContext';
-import type { Kiosk } from './Kiosks';
+import { useKiosks, LiveKiosk } from '@/context/KioskContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Battery, Zap, AlertTriangle } from 'lucide-react';
+import { Battery, Zap, AlertTriangle, DollarSign } from 'lucide-react'; // 1. Add DollarSign
 
-// --- 1. REGISTER THE NEW CHART TYPES ---
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -33,14 +31,11 @@ ChartJS.register(
   Legend
 );
 
-// Define types for our chart data
 type ChartData = {
   labels: string[];
   datasets: any[];
 };
 
-// --- 2. KPI CARD COMPONENT ---
-// A small helper component to make the KPI cards look good
 interface KpiCardProps {
   title: string;
   value: string;
@@ -59,20 +54,16 @@ const KpiCard = ({ title, value, icon }: KpiCardProps) => (
 );
 
 export default function AdminPage() {
-  // --- 3. GET LIVE DATA & HISTORY FROM THE HOOK ---
-  const { liveKiosks, history } = useKiosks();
+  // 2. GET LIVE DATA & HISTORY & EARNINGS FROM THE HOOK
+  const { liveKiosks, history, totalEarnings } = useKiosks();
 
-  // --- 4. STATE FOR ALL OUR CHARTS & KPIs ---
   const [kpiData, setKpiData] = useState({ total: 0, available: 0, operational: 0 });
   const [barChartData, setBarChartData] = useState<ChartData | null>(null);
   const [doughnutChartData, setDoughnutChartData] = useState<ChartData | null>(null);
   const [lineChartData, setLineChartData] = useState<ChartData | null>(null);
 
-  // --- 5. A SINGLE useEffect TO UPDATE EVERYTHING ---
   useEffect(() => {
-    // This will now re-run every 3 seconds when liveKiosks or history changes
     
-    // --- Calculate KPIs ---
     const totalBatteries = liveKiosks.reduce((sum, k) => sum + k.totalBatteries, 0);
     const availableBatteries = liveKiosks.reduce((sum, k) => sum + k.availableBatteries, 0);
     const operationalKiosks = liveKiosks.filter(k => k.status === 'operational').length;
@@ -82,57 +73,61 @@ export default function AdminPage() {
       operational: operationalKiosks 
     });
 
-    // --- Format Bar Chart (Your original chart) ---
     setBarChartData({
-      labels: liveKiosks.map((kiosk: Kiosk) => kiosk.name),
+      labels: liveKiosks.map((kiosk: LiveKiosk) => kiosk.name),
       datasets: [
         {
           label: 'Available Batteries',
-          data: liveKiosks.map((kiosk: Kiosk) => kiosk.availableBatteries),
-          backgroundColor: 'rgba(75, 192, 192, 0.6)', // Green
+          data: liveKiosks.map((kiosk: LiveKiosk) => kiosk.availableBatteries),
+          backgroundColor: 'rgba(75, 192, 192, 0.6)',
         },
         {
-          label: 'Used Batteries',
-          data: liveKiosks.map((kiosk: Kiosk) => kiosk.totalBatteries - kiosk.availableBatteries),
-          backgroundColor: 'rgba(255, 99, 132, 0.6)', // Red
+          label: 'Reserved Batteries',
+          data: liveKiosks.map((kiosk: LiveKiosk) => kiosk.reservedBatteries),
+          backgroundColor: 'rgba(54, 162, 235, 0.6)', // Blue for reserved
+        },
+        {
+          label: 'Used/Empty',
+          data: liveKiosks.map((kiosk: LiveKiosk) => kiosk.totalBatteries - kiosk.availableBatteries - kiosk.reservedBatteries),
+          backgroundColor: 'rgba(255, 99, 132, 0.6)', 
         },
       ],
     });
 
-    // --- Format Doughnut Chart ---
     const busyKiosks = liveKiosks.filter(k => k.status === 'busy').length;
     const maintenanceKiosks = liveKiosks.filter(k => k.status === 'maintenance').length;
+    // 3. Add Reserved to doughnut chart
+    const reservedKiosks = liveKiosks.filter(k => k.reservedBatteries > 0).length;
     setDoughnutChartData({
-      labels: ['Operational', 'Busy', 'Maintenance'],
+      labels: ['Operational', 'Busy', 'Maintenance', 'Reserved'],
       datasets: [{
         label: 'Kiosk Status',
-        data: [operationalKiosks, busyKiosks, maintenanceKiosks],
+        data: [operationalKiosks - reservedKiosks, busyKiosks, maintenanceKiosks, reservedKiosks], // Subtract reserved from operational
         backgroundColor: [
           'rgba(75, 192, 192, 0.6)', // Green
           'rgba(255, 206, 86, 0.6)', // Yellow
           'rgba(255, 99, 132, 0.6)',  // Red
+          'rgba(54, 162, 235, 0.6)',  // Blue
         ],
         borderColor: '#ffffff',
         borderWidth: 2,
       }],
     });
 
-    // --- Format Line Chart ---
     setLineChartData({
-      labels: history.map(h => h.time), // The time (e.g., "10:30:05")
+      labels: history.map(h => h.time), 
       datasets: [{
         label: 'Total Available Batteries',
-        data: history.map(h => h.totalAvailable), // The number
+        data: history.map(h => h.totalAvailable), 
         fill: true,
         backgroundColor: 'rgba(75, 192, 192, 0.2)',
         borderColor: 'rgba(75, 192, 192, 1)',
-        tension: 0.1, // Makes the line smooth
+        tension: 0.1, 
       }],
     });
 
   }, [liveKiosks, history]); // Re-run whenever the live data changes
 
-  // --- 6. CHART OPTIONS (REUSABLE) ---
   const barOptions = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { position: 'top' as const }, title: { display: true, text: 'Live Kiosk Inventory' } },
@@ -149,18 +144,22 @@ export default function AdminPage() {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { position: 'top' as const }, title: { display: true, text: 'Network-Wide Battery Level (Live)' } },
     scales: { y: { beginAtZero: true } },
-    animation: { duration: 0 }, // No animation for a smoother live feed
+    animation: { duration: 0 }, 
   };
 
-  // --- 7. NEW JSX LAYOUT ---
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-4">Admin Dashboard</h1>
         
-        {/* --- KPI CARDS --- */}
-        <div className="grid gap-4 md:grid-cols-3 mb-8">
+        {/* 4. UPDATED KPI CARDS GRID */}
+        <div className="grid gap-4 md:grid-cols-4 mb-8">
+          <KpiCard 
+            title="Total Earnings" 
+            value={`$${totalEarnings}`} // It's live!
+            icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
+          />
           <KpiCard 
             title="Total Available Batteries" 
             value={`${kpiData.available} / ${kpiData.total}`}
@@ -178,9 +177,7 @@ export default function AdminPage() {
           />
         </div>
 
-        {/* --- CHARTS GRID --- */}
         <div className="grid gap-8 md:grid-cols-3 mb-8">
-          {/* Doughnut Chart (1/3 width) */}
           <Card className="md:col-span-1">
             <CardContent className="p-4">
               <div style={{ height: '300px', position: 'relative' }}>
@@ -191,7 +188,6 @@ export default function AdminPage() {
             </CardContent>
           </Card>
           
-          {/* Bar Chart (2/3 width) */}
           <Card className="md:col-span-2">
             <CardContent className="p-4">
               <div style={{ height: '300px', position: 'relative' }}>
@@ -203,7 +199,6 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        {/* --- FULL-WIDTH LINE CHART --- */}
         <Card>
           <CardContent className="p-4">
             <div style={{ height: '300px', position: 'relative' }}>
