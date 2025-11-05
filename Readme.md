@@ -101,3 +101,5 @@ npm run dev
 * Database (PostgreSQL)
 * Payment Gateway API credentials (Stripe, PayPal, Razorpay)
 * Leaflet Maps API key (for kiosk location tracking)
+* Leaflet Maps API key (for kiosk location tracking)
+
