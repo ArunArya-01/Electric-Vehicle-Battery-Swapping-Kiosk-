@@ -34,7 +34,7 @@ The **Electric Vehicle (EV) Battery Swapping Kiosk** is an automated system desi
   * Stripe / PayPal / Razorpay (for processing payments)
   
 - **Location Services**: 
-  * Google Maps API (for kiosk location tracking and geolocation services)
+  * Leaflet API (for kiosk location tracking and geolocation services)
   
 - **Real-Time Updates**: 
   * WebSockets or Socket.io (for real-time battery availability updates)
@@ -100,6 +100,5 @@ npm run dev
 * Node.js (for backend)
 * Database (PostgreSQL)
 * Payment Gateway API credentials (Stripe, PayPal, Razorpay)
-* Leaflet Maps API key (for kiosk location tracking)
 * Leaflet Maps API key (for kiosk location tracking)
 
