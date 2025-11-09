@@ -5,8 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from "sonner";
 import { useNavigate } from 'react-router-dom';
 import type { FormEvent } from 'react';
-import type { Provider, AuthResponse } from '@supabase/supabase-js'; // Import AuthResponse
+import type { Provider, AuthResponse } from '@supabase/supabase-js';
 import { useAuth } from '@/context/AuthContext';
+import { Battery } from 'lucide-react'; // Import your brand icon
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -33,13 +34,12 @@ export default function LoginPage() {
   }, [user, profile, authLoading, navigate]);
 
   
-  // --- UPDATED handleSubmit with TIMEOUT ---
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setLoading(true);
 
     if (isSignUp) {
-      // --- SIGN UP LOGIC (with timeout) ---
+      // --- SIGN UP LOGIC ---
       try {
         const signUpPromise = supabase.auth.signUp({
           email: email,
@@ -51,7 +51,6 @@ export default function LoginPage() {
           setTimeout(() => reject(new Error('Sign-up request timed out')), 5000)
         );
 
-        // Race the sign-up against the timeout
         const { data, error } = await Promise.race([
           signUpPromise, 
           timeoutPromise as Promise<AuthResponse>
@@ -68,7 +67,7 @@ export default function LoginPage() {
       }
 
     } else {
-      // --- SIGN IN LOGIC (with timeout) ---
+      // --- SIGN IN LOGIC ---
       try {
         const signInPromise = supabase.auth.signInWithPassword({
           email: email,
@@ -79,7 +78,6 @@ export default function LoginPage() {
           setTimeout(() => reject(new Error('Sign-in request timed out')), 5000)
         );
         
-        // Race the sign-in against the timeout
         const { data: authData, error: authError } = await Promise.race([
           signInPromise,
           timeoutPromise as Promise<AuthResponse>
@@ -91,12 +89,10 @@ export default function LoginPage() {
       } catch (error: any) {
         toast.error(error.error_description || error.message);
       } finally {
-        // This will now run even if the request times out
         setLoading(false);
       }
     }
   };
-  // --- END OF UPDATED FUNCTION ---
 
 
   const handleSocialLogin = async (provider: Provider) => {
@@ -106,27 +102,31 @@ export default function LoginPage() {
     } catch (error: any) {
       toast.error(error.error_description || error.message);
     }
-    // We don't set loading false here because the user is redirected
   };
 
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-        <div className="text-xl text-gray-900 dark:text-white">Loading...</div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-xl text-foreground">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md dark:bg-gray-800">
+    // Use theme colors for background
+    <div className="flex items-center justify-center min-h-screen bg-background p-4">
+      {/* Use theme card, radius, and shadow */}
+      <div className="w-full max-w-md p-8 space-y-6 bg-card text-card-foreground rounded-lg shadow-lg">
         
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            {isSignUp ? 'Create an Account' : 'Welcome Back'}
+          {/* Added your brand icon and gradient text */}
+          <Battery className="h-12 w-12 text-primary mx-auto mb-4" />
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            {isSignUp ? 'Create an Account' : 'Welcome to SwapCharge'}
           </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          {/* Use muted foreground for description */}
+          <p className="mt-2 text-sm text-muted-foreground">
             {isSignUp ? 'Get started by creating a new account' : 'Sign in to your account to continue'}
           </p> 
         </div>
@@ -135,18 +135,22 @@ export default function LoginPage() {
           <button
             onClick={() => handleSocialLogin('google')}
             disabled={loading}
-            className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
+            // Use theme border, background, text, and hover colors
+            className="w-full inline-flex justify-center py-2 px-4 border border-border rounded-md shadow-sm bg-background text-muted-foreground hover:bg-muted disabled:opacity-50"
           >
+            {/* We can add a Google icon here later if you want */}
             Sign in with Google
           </button>
         </div>
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+            {/* Use theme border color */}
+            <div className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+            {/* Use theme card background and text color */}
+            <span className="px-2 bg-card text-muted-foreground">
               Or continue with email
             </span>
           </div>
@@ -154,31 +158,35 @@ export default function LoginPage() {
 
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {/* Use theme muted text for labels */}
+            <label htmlFor="email" className="block text-sm font-medium text-muted-foreground">
               Email address
             </label>
             <input
               id="email" type="email" placeholder="your@email.com"
               value={email} required={true}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              // Use theme colors for input, border, and focus ring
+              className="w-full px-3 py-2 mt-1 border border-input rounded-md shadow-sm bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label htmlFor="password" className="block text-sm font-medium text-muted-foreground">
               Password
             </label>
             <input
               id="password" type="password" placeholder="Your password"
               value={password} required={true}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              // Use theme colors for input, border, and focus ring
+              className="w-full px-3 py-2 mt-1 border border-input rounded-md shadow-sm bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div>
             <button 
               type="submit" disabled={loading}
-              className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50"
+              // Use theme primary colors for the main button
+              className="w-full px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-md shadow-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 dark:focus:ring-offset-card disabled:opacity-50"
             >
               {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
             </button>
@@ -192,7 +200,8 @@ export default function LoginPage() {
               e.preventDefault();
               setIsSignUp(!isSignUp);
             }} 
-            className="font-medium text-blue-600 hover:text-blue-500"
+            // Use theme primary color for the link
+            className="font-medium text-primary hover:text-primary/80"
           >
             {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
           </a>
