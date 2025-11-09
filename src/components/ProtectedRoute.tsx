@@ -1,20 +1,33 @@
 // src/components/ProtectedRoute.tsx
 
 import { Navigate, Outlet } from 'react-router-dom';
+// --- 1. IMPORT THE useAuth HOOK ---
+import { useAuth } from '@/context/AuthContext';
 
-const ProtectedRoute = () => {
-  // 1. Get the "authRole" we saved in sessionStorage
-  const role = sessionStorage.getItem('authRole');
+export default function ProtectedRoute() {
+  // --- 2. GET AUTH DATA FROM OUR GLOBAL CONTEXT ---
+  const { user, profile, loading } = useAuth();
 
-  // 2. Check if the role is "admin"
-  if (role === 'admin') {
-    // If they are an admin, show the page they asked for
-    return <Outlet />;
+  // --- 3. REMOVE ALL THE OLD useState/useEffect LOGIC ---
+  // All that is now handled by AuthContext
+
+  // --- 4. IMPLEMENT THE NEW SECURITY LOGIC ---
+  
+  // While the AuthContext is loading the user, show a loading message
+  if (loading) {
+    return <div>Loading session...</div>;
   }
 
-  // 3. If they are not an admin, send them back to the login page
-  // We'll set the login page to be "/" in the next step
-  return <Navigate to="/" replace />;
-};
+  // If there is a user AND their role is 'admin', show the page
+  if (user && profile?.role === 'admin') {
+    return <Outlet />; // This renders the <AdminPage />
+  }
 
-export default ProtectedRoute;
+  // If there is a user but they are NOT an admin, send them to their dashboard
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // If there is no user, send them to the login page
+  return <Navigate to="/" replace />;
+}

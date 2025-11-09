@@ -1,109 +1,77 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/pages/Dashboard.tsx
+
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Battery, Clock, MapPin, TrendingUp, LogOut } from "lucide-react";
-import Navbar from "@/components/Navbar";
-import { supabase } from "@/integrations/supabase/client";
+import { Battery, LogOut } from "lucide-react";
+import Navbar from "@/components/Navbar"; // Corrected Navbar import path
 import { toast } from "sonner";
-import type { User } from "@supabase/supabase-js";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+
+// --- 1. Define a type that MATCHES your table ---
+interface Reservation {
+  id: number;
+  created_at: string;
+  kiosk_id: number | null; // This matches your screenshot
+  status: string | null;
+  user_id: string;
+  payment_amt: number | null;
+}
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, profile, signOut } = useAuth();
+  
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // --- 2. Fetch data when the component loads ---
   useEffect(() => {
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-      if (!session) {
-        navigate("/auth");
-      }
-    });
+    if (user) {
+      const fetchDashboardData = async () => {
+        setLoading(true);
+        try {
+          // This RLS query is now active and secure
+          const { data, error } = await supabase
+            .from('reservations')
+            .select('*') // Fetches all columns
+            .order('created_at', { ascending: false }) // Show newest first
+            .limit(5); // Only get the 5 most recent
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (!session) {
-        navigate("/auth");
-      }
-    });
+          if (error) throw error;
+          
+          setReservations(data || []); // Handle null as empty array
 
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+        } catch (error: any) {
+          toast.error("Failed to fetch recent swaps: " + error.message);
+        } finally {
+          setLoading(false);
+        }
+      };
 
-  const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Error signing out");
-    } else {
-      toast.success("Signed out successfully");
-      navigate("/");
+      fetchDashboardData();
     }
+  }, [user]); // Re-run this effect if the user changes
+
+
+  const handleSignOut = () => {
+    signOut();
+    toast.success("Signed out successfully");
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Battery className="h-12 w-12 text-primary animate-pulse mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // Helper function to format dates
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
 
-  const mockStats = [
-    {
-      title: "Total Swaps",
-      value: "24",
-      icon: Battery,
-      trend: "+3 this month",
-      color: "text-primary",
-    },
-    {
-      title: "Time Saved",
-      value: "8.5 hrs",
-      icon: Clock,
-      trend: "vs. charging",
-      color: "text-secondary",
-    },
-    {
-      title: "Favorite Station",
-      value: "Downtown",
-      icon: MapPin,
-      trend: "12 visits",
-      color: "text-accent",
-    },
-  ];
-
-  const recentSwaps = [
-    {
-      id: 1,
-      station: "Downtown Station",
-      date: "2024-01-15",
-      time: "14:30",
-      status: "completed",
-    },
-    {
-      id: 2,
-      station: "Tech Park Hub",
-      date: "2024-01-12",
-      time: "09:15",
-      status: "completed",
-    },
-    {
-      id: 3,
-      station: "Green Valley Center",
-      date: "2024-01-08",
-      time: "16:45",
-      status: "completed",
-    },
-  ];
+  // --- 3. Calculate stats from REAL data ---
+  const totalSwaps = reservations.length;
+  const totalSpent = reservations.reduce((acc, swap) => acc + (swap.payment_amt || 0), 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,7 +84,7 @@ const Dashboard = () => {
               Dashboard
             </h1>
             <p className="text-muted-foreground">
-              Welcome back, {user?.user_metadata?.name || user?.email}!
+              Welcome back, {profile?.email || user?.email}!
             </p>
           </div>
           <Button variant="outline" onClick={handleSignOut}>
@@ -125,59 +93,82 @@ const Dashboard = () => {
           </Button>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          {mockStats.map((stat, index) => (
-            <Card key={index} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {stat.title}
-                </CardTitle>
-                <stat.icon className={`h-5 w-5 ${stat.color}`} />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold mb-1">{stat.value}</div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" />
-                  {stat.trend}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+        {/* --- 4. Stats Grid (now uses REAL data) --- */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Swaps
+              </CardTitle>
+              <Battery className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold mb-1">
+                {loading ? '...' : totalSwaps}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your total completed swaps
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Spent
+              </CardTitle>
+              <Battery className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold mb-1">
+                {loading ? '...' : `$${totalSpent.toFixed(2)}`}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your total spending
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Recent Swaps */}
+        {/* --- 5. Recent Swaps (now uses REAL data) --- */}
         <Card>
           <CardHeader>
             <CardTitle>Recent Battery Swaps</CardTitle>
             <CardDescription>Your swap history and activity</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentSwaps.map((swap) => (
-                <div
-                  key={swap.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Battery className="h-5 w-5 text-primary" />
+            {loading ? (
+              <p>Loading activities...</p>
+            ) : reservations.length === 0 ? (
+              // This message will now show correctly
+              <p>You have no recent activity.</p>
+            ) : (
+              <div className="space-y-4">
+                {reservations.map((swap) => (
+                  <div
+                    key={swap.id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Battery className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        {/* 6. Display Kiosk ID instead of name */}
+                        <p className="font-medium">Kiosk ID: {swap.kiosk_id || 'N/A'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(swap.created_at)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{swap.station}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {swap.date} at {swap.time}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-secondary">
+                        {swap.status || 'N/A'}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-secondary">
-                      {swap.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>
