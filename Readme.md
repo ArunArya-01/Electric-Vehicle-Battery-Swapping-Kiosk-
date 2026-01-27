@@ -199,7 +199,6 @@ src/
 For support, please:
 1. Check the [Issues](../../issues) section for known problems
 2. Create a new issue if your problem isn't listed
-3. Contact the development team at [email@example.com]
 
 ## Roadmap
 
